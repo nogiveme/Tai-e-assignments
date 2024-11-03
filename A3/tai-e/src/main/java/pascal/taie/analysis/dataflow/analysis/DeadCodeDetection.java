@@ -25,12 +25,10 @@ package pascal.taie.analysis.dataflow.analysis;
 import pascal.taie.analysis.MethodAnalysis;
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
-import pascal.taie.analysis.dataflow.analysis.constprop.Value;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.dataflow.fact.SetFact;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.analysis.graph.cfg.CFGBuilder;
-import pascal.taie.analysis.graph.cfg.Edge;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.ArithmeticExp;
@@ -40,14 +38,11 @@ import pascal.taie.ir.exp.FieldAccess;
 import pascal.taie.ir.exp.NewExp;
 import pascal.taie.ir.exp.RValue;
 import pascal.taie.ir.exp.Var;
-import pascal.taie.ir.stmt.AssignStmt;
 import pascal.taie.ir.stmt.If;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.SwitchStmt;
 
-import java.util.Comparator;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 public class DeadCodeDetection extends MethodAnalysis {
 
@@ -71,6 +66,34 @@ public class DeadCodeDetection extends MethodAnalysis {
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         // TODO - finish me
         // Your task is to recognize dead code in ir and add it to deadCode
+
+        // not reachable analysis
+        // 1. control flow not reachable analysis
+        Set<Stmt> visit = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        var entry = cfg.getEntry();
+        Queue<Stmt> queue = new LinkedList<>();
+        queue.add(entry);
+        while (!queue.isEmpty()) {
+            var stmt = queue.poll();
+            visit.add(stmt);
+            if (stmt instanceof If) {
+                var condition = ((If) stmt).getCondition();
+                var fact = constants.getResult(stmt);
+                if (fact.get(condition.getOperand1()).isConstant()
+                        && fact.get(condition.getOperand2()).isConstant()) {
+
+                }
+            }
+            if (stmt instanceof SwitchStmt) {
+
+            }
+            queue.addAll(cfg.getSuccsOf(stmt));
+        }
+        for (Stmt stmt : cfg) {
+            if (!visit.contains(stmt)) {
+                deadCode.add(stmt);
+            }
+        }
         return deadCode;
     }
 
