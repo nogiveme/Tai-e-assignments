@@ -23,15 +23,12 @@
 package pascal.taie.analysis.graph.callgraph;
 
 import pascal.taie.World;
-import pascal.taie.ir.proginfo.MethodRef;
 import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.language.classes.ClassHierarchy;
 import pascal.taie.language.classes.JClass;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.classes.Subsignature;
-import polyglot.util.WorkList;
 
-import java.lang.invoke.CallSite;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.Queue;
