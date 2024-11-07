@@ -29,8 +29,11 @@ import pascal.taie.language.classes.ClassHierarchy;
 import pascal.taie.language.classes.JClass;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.classes.Subsignature;
+import polyglot.util.WorkList;
 
+import java.lang.invoke.CallSite;
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.Queue;
 import java.util.Set;
 
@@ -49,8 +52,24 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
 
     private CallGraph<Invoke, JMethod> buildCallGraph(JMethod entry) {
         DefaultCallGraph callGraph = new DefaultCallGraph();
-        callGraph.addEntryMethod(entry);
+//        callGraph.addEntryMethod(entry);
         // TODO - finish me
+        Queue<JMethod> worklist = new ArrayDeque<>();
+        worklist.add(entry);
+        while (!worklist.isEmpty()) {
+            JMethod method = worklist.remove();
+            if (!callGraph.contains(method)) {
+                callGraph.addReachableMethod(method);
+                callGraph.callSitesIn(method).forEach(cs -> {
+                    var methods = resolve(cs);
+                    for (var m : methods) {
+                        var edge = new Edge<Invoke, JMethod>(CallGraphs.getCallKind(cs), cs, m);
+                        callGraph.addEdge(edge);
+                        worklist.add(m);
+                    }
+                });
+            }
+        }
         return callGraph;
     }
 
@@ -59,7 +78,27 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
      */
     private Set<JMethod> resolve(Invoke callSite) {
         // TODO - finish me
-        return null;
+        Set<JMethod> candidates = new HashSet<>();
+        var kind = CallGraphs.getCallKind(callSite);
+        var methodRef = callSite.getMethodRef();
+        var declareClass = methodRef.getDeclaringClass();
+        var signature = methodRef.getSubsignature();
+        if (kind == CallKind.STATIC) {
+            var method = declareClass.getDeclaredMethod(signature);
+            candidates.add(method);
+            return candidates;
+        }
+        if (kind == CallKind.SPECIAL) {
+            candidates.add(dispatch(declareClass, signature));
+            return candidates;
+        }
+        if (kind == CallKind.VIRTUAL) {
+            candidates.add(dispatch(declareClass, signature));
+            hierarchy.getDirectSubclassesOf(declareClass).forEach(jClass -> {
+                candidates.add(dispatch(jClass, methodRef.getSubsignature()));
+            });
+        }
+        return candidates;
     }
 
     /**
@@ -70,6 +109,9 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
      */
     private JMethod dispatch(JClass jclass, Subsignature subsignature) {
         // TODO - finish me
-        return null;
+        var method = jclass.getDeclaredMethod(subsignature);
+        if (method != null) return method;
+        if (jclass.getSuperClass() == null) return null;
+        return dispatch(jclass.getSuperClass(), subsignature);
     }
 }
