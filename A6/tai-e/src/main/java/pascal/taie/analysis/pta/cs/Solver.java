@@ -22,6 +22,7 @@
 
 package pascal.taie.analysis.pta.cs;
 
+import fj.P;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pascal.taie.World;
@@ -50,17 +51,12 @@ import pascal.taie.analysis.pta.pts.PointsToSetFactory;
 import pascal.taie.config.AnalysisOptions;
 import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
-import pascal.taie.ir.stmt.Copy;
-import pascal.taie.ir.stmt.Invoke;
-import pascal.taie.ir.stmt.LoadArray;
-import pascal.taie.ir.stmt.LoadField;
-import pascal.taie.ir.stmt.New;
-import pascal.taie.ir.stmt.StmtVisitor;
-import pascal.taie.ir.stmt.StoreArray;
-import pascal.taie.ir.stmt.StoreField;
+import pascal.taie.ir.stmt.*;
 import pascal.taie.language.classes.JField;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.Type;
+
+import java.lang.invoke.CallSite;
 
 class Solver {
 
@@ -95,6 +91,7 @@ class Solver {
     }
 
     private void initialize() {
+        // csManager manage nodes and cs element
         csManager = new MapBasedCSManager();
         callGraph = new CSCallGraph(csManager);
         pointerFlowGraph = new PointerFlowGraph();
@@ -107,11 +104,57 @@ class Solver {
         addReachable(csMethod);
     }
 
+    private void analyze() {
+        while (!workList.isEmpty()) {
+            var entry = workList.pollEntry();
+            var pointer = entry.pointer();
+            var pts = entry.pointsToSet();
+            var delta = propagate(pointer, pts);
+            if (pointer instanceof CSVar) {
+                var ptn = pointer.getPointsToSet();
+                var var = ((CSVar) pointer).getVar();
+                var context = ((CSVar) pointer).getContext();
+                for (var csobj : ptn) {
+                    if (delta.contains(csobj)) continue;
+                    for (var loadField : var.getLoadFields()) {
+                        addPFGEdge(
+                                csManager.getInstanceField(csobj, loadField.getFieldAccess().getFieldRef().resolve()),
+                                csManager.getCSVar(context, loadField.getLValue())
+                        );
+                    }
+                    for (var storeField : var.getStoreFields()) {
+                        addPFGEdge(
+                                csManager.getCSVar(context, storeField.getRValue()),
+                                csManager.getInstanceField(csobj, storeField.getFieldAccess().getFieldRef().resolve())
+                        );
+                    }
+                    for (var loadArrayField : var.getLoadArrays()) {
+                        addPFGEdge(
+                                csManager.getArrayIndex(csobj),
+                                csManager.getCSVar(context, loadArrayField.getLValue())
+                        );
+                    }
+                    for (var storeArrayField : var.getStoreArrays()) {
+                        addPFGEdge(
+                                csManager.getCSVar(context, storeArrayField.getRValue()),
+                                csManager.getArrayIndex(csobj)
+                        );
+                    }
+                    processCall((CSVar)pointer, csobj);
+                }
+            }
+        }
+    }
+
     /**
      * Processes new reachable context-sensitive method.
      */
     private void addReachable(CSMethod csMethod) {
         // TODO - finish me
+        if (!callGraph.contains(csMethod)) {
+            callGraph.addEntryMethod(csMethod);
+            csMethod.getMethod().getIR().getStmts().forEach(stmt -> {stmt.accept(new StmtProcessor(csMethod));});
+        }
     }
 
     /**
@@ -128,8 +171,40 @@ class Solver {
             this.context = csMethod.getContext();
         }
 
+
         // TODO - if you choose to implement addReachable()
         //  via visitor pattern, then finish me
+
+        @Override
+        public Void visit(New stmt) {
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        @Override
+        public Void visit(Copy stmt) {
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        @Override
+        public Void visit(StoreArray stmt) {
+            return StmtVisitor.super.visit(stmt);
+        }
+
+
+        @Override
+        public Void visit(LoadArray stmt) {
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        @Override
+        public Void visit(StoreField stmt) {
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        @Override
+        public Void visit(LoadField stmt) {
+            return StmtVisitor.super.visit(stmt);
+        }
     }
 
     /**
@@ -137,12 +212,13 @@ class Solver {
      */
     private void addPFGEdge(Pointer source, Pointer target) {
         // TODO - finish me
+        if (pointerFlowGraph.getSuccsOf(source).contains(target)) return ;
+        pointerFlowGraph.addEdge(source, target);
+        workList.addEntry(target, source.getPointsToSet());
     }
 
     /**
-     * Processes work-list entries until the work-list is empty.
-     */
-    private void analyze() {
+     * Processes work-list entries until the work-list is emp
         // TODO - finish me
     }
 
@@ -152,17 +228,68 @@ class Solver {
      */
     private PointsToSet propagate(Pointer pointer, PointsToSet pointsToSet) {
         // TODO - finish me
-        return null;
+        var delta = PointsToSetFactory.make();
+        var cur_pts = pointer.getPointsToSet();
+        for (var item : pointsToSet) {
+            if (cur_pts.contains(item)) continue;
+            delta.addObject(item);
+            cur_pts.addObject(item);
+        }
+        pointer.setPointsToSet(cur_pts);
+        for (var suc : pointerFlowGraph.getSuccsOf(pointer)) {
+            workList.addEntry(suc, delta);
+        }
+        return delta;
     }
 
     /**
-     * Processes instance calls when points-to set of the receiver variable changes.
-     *
+     * Processes instance calls when p
      * @param recv    the receiver variable
      * @param recvObj set of new discovered objects pointed by the variable.
      */
     private void processCall(CSVar recv, CSObj recvObj) {
         // TODO - finish me
+        var var = recv.getVar();
+        var context = recv.getContext();
+        var invokes = var.getInvokes();
+        for (var callsite : invokes) {
+            var csCallsite = csManager.getCSCallSite(context, callsite);
+            var callee = resolveCallee(recvObj, callsite);
+            var calleeContext = contextSelector.selectContext(csCallsite, callee);
+            var csCallee = csManager.getCSMethod(calleeContext, callee);
+            workList.addEntry(
+                    csManager.getCSVar(calleeContext, callee.getIR().getThis()),
+                    PointsToSetFactory.make(recvObj)
+            );
+            if (callGraph.getCalleesOf(csCallsite).contains(csCallee)) continue;
+            var callKind = getKind(callsite);
+            callGraph.addEdge(new Edge<>(callKind, csCallsite, csCallee));
+            addReachable(csCallee);
+            var args = csCallee.getMethod().getIR().getParams();
+//            assert args.size() == callsite.getRValue().getArgs().size();
+            for(int i = 0;i < args.size();i ++){
+                addPFGEdge(
+                        csManager.getCSVar(context, callsite.getRValue().getArg(i)),
+                        csManager.getCSVar(calleeContext, args.get(i))
+                );
+            }
+            if(callsite.getLValue() != null){
+                for (var ret : csCallee.getMethod().getIR().getReturnVars()) {
+                    addPFGEdge(
+                            csManager.getCSVar(calleeContext, ret),
+                            csManager.getCSVar(context, callsite.getLValue())
+                    );
+                }
+            }
+        }
+    }
+
+    private CallKind getKind(Invoke invoke) {
+        if (invoke.isInterface()) return CallKind.INTERFACE;
+        if (invoke.isStatic()) return CallKind.STATIC;
+        if (invoke.isSpecial()) return CallKind.SPECIAL;
+        if (invoke.isVirtual()) return CallKind.VIRTUAL;
+        return null;
     }
 
     /**

@@ -38,6 +38,8 @@ import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.classes.JMethod;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * Implementation of interprocedural constant propagation for int values.
  */
@@ -77,36 +79,61 @@ public class InterConstantPropagation extends
     @Override
     protected boolean transferCallNode(Stmt stmt, CPFact in, CPFact out) {
         // TODO - finish me
-        return false;
+        AtomicBoolean changed = new AtomicBoolean(false);
+        in.forEach(((var, value) -> {
+            if(out.update(var, value)) {
+                changed.set(true);
+            }
+        }));
+        return changed.get();
     }
 
     @Override
     protected boolean transferNonCallNode(Stmt stmt, CPFact in, CPFact out) {
         // TODO - finish me
-        return false;
+        return cp.transferNode(stmt, in, out);
     }
 
     @Override
     protected CPFact transferNormalEdge(NormalEdge<Stmt> edge, CPFact out) {
         // TODO - finish me
-        return null;
+        return out;
     }
 
     @Override
     protected CPFact transferCallToReturnEdge(CallToReturnEdge<Stmt> edge, CPFact out) {
         // TODO - finish me
-        return null;
+        var cs = (Invoke)edge.getSource();
+        var lvalue = cs.getLValue();
+        var res = out.copy();
+        res.remove(lvalue);
+        return res;
     }
 
     @Override
     protected CPFact transferCallEdge(CallEdge<Stmt> edge, CPFact callSiteOut) {
         // TODO - finish me
-        return null;
+        var src = (Invoke)edge.getSource();
+        var callerArgs = src.getRValue().getArgs();
+        var calleeArgs = edge.getCallee().getIR().getParams();
+        CPFact res = new CPFact();
+        for (int i = 0; i < calleeArgs.size(); i++)  {
+            res.update(calleeArgs.get(i), callSiteOut.get(callerArgs.get(i)));
+        }
+        return res;
     }
 
     @Override
     protected CPFact transferReturnEdge(ReturnEdge<Stmt> edge, CPFact returnOut) {
         // TODO - finish me
-        return null;
+        CPFact res = new CPFact();
+        var cs = (Invoke)edge.getCallSite();
+        var lvalue = cs.getLValue();
+        if (lvalue != null) {
+            edge.getReturnVars().forEach(var -> {
+                res.update(lvalue, cp.meetValue(res.get(lvalue), returnOut.get(var)));
+            });
+        }
+        return res;
     }
 }

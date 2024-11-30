@@ -81,6 +81,7 @@ public class DeadCodeDetection extends MethodAnalysis {
                 var fact = constants.getResult(stmt);
                 if (fact.get(condition.getOperand1()).isConstant()
                         && fact.get(condition.getOperand2()).isConstant()) {
+                    var operator = condition.getOperator();
 
                 }
             }

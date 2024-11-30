@@ -94,7 +94,7 @@ public class ConstantPropagation extends
         if (stmt instanceof DefinitionStmt<?,?>) {
             var lv = ((DefinitionStmt<?, ?>) stmt).getLValue();
             var rv = ((DefinitionStmt<?, ?>) stmt).getRValue();
-            if (lv == null || !canHoldInt((Var) lv)) return false;
+            if (!(lv instanceof Var) || !canHoldInt((Var) lv)) return false;
             out.remove((Var) lv);
             out.update((Var) lv, evaluate(rv, in));
         }
@@ -137,74 +137,75 @@ public class ConstantPropagation extends
         var o1 = evaluate(((BinaryExp) exp).getOperand1(), in);
         var o2 = evaluate(((BinaryExp) exp).getOperand2(), in);
         if (o1.isNAC() || o2.isNAC()) return Value.getNAC();
-        if (o1.isUndef() || o2.isUndef()) return Value.getUndef();
-        if (exp instanceof BitwiseExp) {
-            var op = ((BitwiseExp) exp).getOperator();
-            switch (op) {
-                case OR -> {
-                    return Value.makeConstant(o1.getConstant() | o2.getConstant());
-                }
-                case XOR -> {
-                    return Value.makeConstant(o1.getConstant() ^ o2.getConstant());
-                }
-                case AND -> {
-                    return Value.makeConstant(o1.getConstant() & o2.getConstant());
-                }
-            }
-        }
-        if (exp instanceof ArithmeticExp) {
-            var op = ((ArithmeticExp) exp).getOperator();
-            switch (op) {
-                case ADD -> {
-                    return Value.makeConstant(o1.getConstant() + o2.getConstant());
-                }
-                case SUB -> {
-                    return Value.makeConstant(o1.getConstant() - o2.getConstant());
-                }
-                case MUL -> {
-                    return Value.makeConstant(o1.getConstant() * o2.getConstant());
-                }
-                case DIV -> {
-                    if (o2.getConstant() == 0) return Value.getUndef();
-                    return Value.makeConstant(o1.getConstant() / o2.getConstant());
-                }
-                case REM -> {
-                    if (o2.getConstant() == 0) return Value.getUndef();
-                    return Value.makeConstant(o1.getConstant() % o2.getConstant());
+        else if (o1.isConstant() && o2.isConstant()) {
+            if (exp instanceof BitwiseExp) {
+                var op = ((BitwiseExp) exp).getOperator();
+                switch (op) {
+                    case OR -> {
+                        return Value.makeConstant(o1.getConstant() | o2.getConstant());
+                    }
+                    case XOR -> {
+                        return Value.makeConstant(o1.getConstant() ^ o2.getConstant());
+                    }
+                    case AND -> {
+                        return Value.makeConstant(o1.getConstant() & o2.getConstant());
+                    }
                 }
             }
-        }
-        if (exp instanceof ConditionExp) {
-            var op = ((ConditionExp) exp).getOperator();
-            switch (op) {
-                case EQ -> {
-                    return Value.makeConstant(o1.getConstant() == o2.getConstant() ? 1 : 0);
-                }
-                case GE -> {
-                    return Value.makeConstant(o1.getConstant() >= o2.getConstant() ? 1 : 0);
-                }
-                case GT -> {
-                    return Value.makeConstant(o1.getConstant() > o2.getConstant() ? 1 : 0);
-                }
-                case LE -> {
-                    return Value.makeConstant(o1.getConstant() <= o2.getConstant() ? 1 : 0);
-                }
-                case LT -> {
-                    return Value.makeConstant(o1.getConstant() < o2.getConstant() ? 1 : 0);
+            if (exp instanceof ArithmeticExp) {
+                var op = ((ArithmeticExp) exp).getOperator();
+                switch (op) {
+                    case ADD -> {
+                        return Value.makeConstant(o1.getConstant() + o2.getConstant());
+                    }
+                    case SUB -> {
+                        return Value.makeConstant(o1.getConstant() - o2.getConstant());
+                    }
+                    case MUL -> {
+                        return Value.makeConstant(o1.getConstant() * o2.getConstant());
+                    }
+                    case DIV -> {
+                        if (o2.getConstant() == 0) return Value.getUndef();
+                        return Value.makeConstant(o1.getConstant() / o2.getConstant());
+                    }
+                    case REM -> {
+                        if (o2.getConstant() == 0) return Value.getUndef();
+                        return Value.makeConstant(o1.getConstant() % o2.getConstant());
+                    }
                 }
             }
-        }
-        if (exp instanceof ShiftExp) {
-            var op = ((ShiftExp) exp).getOperator();
-            switch (op) {
-                case SHL -> {
-                    return Value.makeConstant(o1.getConstant() << o2.getConstant());
+            if (exp instanceof ConditionExp) {
+                var op = ((ConditionExp) exp).getOperator();
+                switch (op) {
+                    case EQ -> {
+                        return Value.makeConstant(o1.getConstant() == o2.getConstant() ? 1 : 0);
+                    }
+                    case GE -> {
+                        return Value.makeConstant(o1.getConstant() >= o2.getConstant() ? 1 : 0);
+                    }
+                    case GT -> {
+                        return Value.makeConstant(o1.getConstant() > o2.getConstant() ? 1 : 0);
+                    }
+                    case LE -> {
+                        return Value.makeConstant(o1.getConstant() <= o2.getConstant() ? 1 : 0);
+                    }
+                    case LT -> {
+                        return Value.makeConstant(o1.getConstant() < o2.getConstant() ? 1 : 0);
+                    }
                 }
-                case SHR -> {
-                    return Value.makeConstant(o1.getConstant() >> o2.getConstant());
-                }
-                case USHR -> {
-                    return Value.makeConstant(o1.getConstant() >>> o2.getConstant());
+            }
+            if (exp instanceof ShiftExp) {
+                var op = ((ShiftExp) exp).getOperator();
+                switch (op) {
+                    case SHL -> {
+                        return Value.makeConstant(o1.getConstant() << o2.getConstant());
+                    }
+                    case SHR -> {
+                        return Value.makeConstant(o1.getConstant() >> o2.getConstant());
+                    }
+                    case USHR -> {
+                        return Value.makeConstant(o1.getConstant() >>> o2.getConstant());
+                    }
                 }
             }
         }
