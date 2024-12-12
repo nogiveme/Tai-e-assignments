@@ -42,14 +42,12 @@ public class _2ObjSelector implements ContextSelector {
 
     @Override
     public Context selectContext(CSCallSite callSite, JMethod callee) {
-        // TODO - finish me
         return callSite.getContext();
     }
 
     @Override
     public Context selectContext(CSCallSite callSite, CSObj recv, JMethod callee) {
-        // TODO - finish me
-        var context = callSite.getContext();
+        var context = recv.getContext();
         int length = context.getLength();
         if (length > 0) {
             int lastIndex = length - 1;
@@ -61,7 +59,6 @@ public class _2ObjSelector implements ContextSelector {
 
     @Override
     public Context selectHeapContext(CSMethod method, Obj obj) {
-        // TODO - finish me
         var context = method.getContext();
         int length = context.getLength();
         if (length > 1) {

@@ -42,21 +42,18 @@ public class _1CallSelector implements ContextSelector {
 
     @Override
     public Context selectContext(CSCallSite csCallSite, JMethod callee) {
-        // TODO - finish me
         var callSite = csCallSite.getCallSite();
         return ListContext.make(callSite);
     }
 
     @Override
     public Context selectContext(CSCallSite csCallSite, CSObj recv, JMethod callee) {
-        // TODO - finish me
         var callSite = csCallSite.getCallSite();
         return ListContext.make(callSite);
     }
 
     @Override
     public Context selectHeapContext(CSMethod method, Obj obj) {
-        // TODO - finish me
         return getEmptyContext();
     }
 }

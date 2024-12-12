@@ -22,10 +22,13 @@
 
 package pascal.taie.analysis.dataflow.inter;
 
+import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.icfg.ICFG;
+import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.util.collection.SetQueue;
 
+import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -58,11 +61,39 @@ class InterSolver<Method, Node, Fact> {
         return result;
     }
 
+    public void addTask(Node node) {
+        workList.offer(node);
+    }
+
     private void initialize() {
         // TODO - finish me
+        workList = new LinkedList<>(icfg.getNodes());
+        for (var node : icfg.getNodes()) {
+            result.setInFact(node, analysis.newInitialFact());
+            result.setOutFact(node, analysis.newInitialFact());
+        }
+        icfg.entryMethods().forEach(method -> {
+            Node entry = icfg.getEntryOf(method);
+            result.setOutFact(entry, analysis.newBoundaryFact(entry));
+        });
     }
 
     private void doSolve() {
         // TODO - finish me
+        if (!(analysis instanceof InterConstantPropagation constantAnalysis)) return;
+        while (!workList.isEmpty()) {
+            Node node = workList.poll();
+            CPFact in = (CPFact) result.getInFact(node);
+            icfg.getInEdgesOf(node).forEach(edge -> {
+                constantAnalysis.meetInto(
+                        (CPFact) analysis.transferEdge(edge, result.getOutFact(edge.getSource())),
+                        in);
+            });
+            constantAnalysis.processStoreField((Stmt) node, in);
+            constantAnalysis.processStoreArray((Stmt) node, in);
+            if(analysis.transferNode(node, result.getInFact(node), result.getOutFact(node))) {
+                icfg.getSuccsOf(node).forEach(workList::offer);
+            }
+        }
     }
 }
